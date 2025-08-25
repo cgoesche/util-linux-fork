@@ -21,6 +21,7 @@
 #include "debug.h"
 #include "strutils.h"
 #include "statfs_magic.h"
+#include "strv.h"
 
 static void procfs_process_deinit_path(struct path_cxt *pc);
 

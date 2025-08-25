@@ -42,6 +42,7 @@
  *
  * Copyright (C) 2014 Sami Kerola <kerolasa@iki.fi>
  * Copyright (C) 2014 Karel Zak <kzak@redhat.com>
+ * Copyright (C) 2025 Christian Goeschel Ndjomouo <cgoesc2@wgu.edu>
  */
 
 #include <ctype.h>		/* for isdigit() */
@@ -55,20 +56,24 @@
 #include "c.h"
 #include "closestream.h"
 #include "nls.h"
+#include "pid-utils.h"
 #include "pidfd-utils.h"
 #include "procfs.h"
 #include "pathnames.h"
 #include "signames.h"
 #include "strutils.h"
+#include "strv.h"
 #include "ttyutils.h"
 #include "xalloc.h"
 #include "fileutils.h"
+#include "statfs_magic.h"
 
 /* partial success, otherwise we return regular EXIT_{SUCCESS,FAILURE} */
 #define KILL_EXIT_SOMEOK	64
 
 #if defined(HAVE_PIDFD_OPEN) && defined(HAVE_PIDFD_SEND_SIGNAL)
 # define USE_KILL_WITH_TIMEOUT 1
+# define USE_KILL_WITH_PIDFDFS 1
 #endif
 
 enum {
@@ -89,6 +94,7 @@ struct timeouts {
 struct kill_control {
 	char *arg;
 	pid_t pid;
+	uint64_t pidfd_ino;
 	int numsig;
 #ifdef HAVE_SIGQUEUE
 	union sigval sigdata;
@@ -261,7 +267,7 @@ static void __attribute__((__noreturn__)) usage(void)
 {
 	FILE *out = stdout;
 	fputs(USAGE_HEADER, out);
-	fprintf(out, _(" %s [options] <pid>|<name>...\n"), program_invocation_short_name);
+	fprintf(out, _(" %s [options] <pid>|<pid>:<pidfd_ino>|<name>...\n"), program_invocation_short_name);
 
 	fputs(USAGE_SEPARATOR, out);
 	fputs(_("Forcibly terminate a process.\n"), out);
@@ -300,7 +306,7 @@ static void __attribute__((__noreturn__)) print_kill_version(void)
 #ifdef HAVE_SIGQUEUE
 		"sigqueue",
 #endif
-#ifdef USE_KILL_WITH_TIMEOUT
+#if defined(USE_KILL_WITH_TIMEOUT) || defined(USE_KILL_WITH_PIDFDFS)
 		"pidfd",
 #endif
 	};
@@ -551,10 +557,27 @@ static int kill_verbose(const struct kill_control *ctl)
 		rc = sigqueue(ctl->pid, ctl->numsig, ctl->sigdata);
 	else
 #endif
-		rc = kill(ctl->pid, ctl->numsig);
+#ifdef USE_KILL_WITH_PIDFDFS
+		if ((ctl->pidfd_ino > 0)) {
+			int pfd;
+			if ((pfd = pidfd_open(ctl->pid, 0)) < 0) {
+				errx(EXIT_FAILURE, _("pidfd_open() failed: %d"), ctl->pid);
+			}
 
-	if (rc < 0)
+			if ((rc = ul_pfd_validate_pfd_ino(pfd, ctl->pidfd_ino)) < 0) {
+				errx(EXIT_FAILURE, _("pidfd inode %"PRIu64" not found for pid %d"), ctl->pidfd_ino, ctl->pid);
+			}
+
+			if ((rc = pidfd_send_signal(pfd, ctl->numsig, 0, 0)) < 0) {
+				errx(EXIT_FAILURE, _("pidfd_send_signal() failed"));
+			}
+		} else
+#endif
+			rc = kill(ctl->pid, ctl->numsig);
+
+	if (rc < 0) {
 		warn(_("sending signal to %s failed"), ctl->arg);
+	}
 	return rc;
 }
 
@@ -601,11 +624,11 @@ int main(int argc, char **argv)
 
 	/* The rest of the arguments should be process ids and names. */
 	for ( ; (ctl.arg = *argv) != NULL; argv++) {
-		char *ep = NULL;
-
 		errno = 0;
-		ctl.pid = strtol(ctl.arg, &ep, 10);
-		if (errno == 0 && ep && *ep == '\0' && ctl.arg < ep) {
+
+		ul_parse_pid_str(ctl.arg, &ctl.pid, &ctl.pidfd_ino);
+
+		if(errno == 0) {
 			if (check_signal_handler(&ctl) <= 0)
 				continue;
 			if (kill_verbose(&ctl) != 0)

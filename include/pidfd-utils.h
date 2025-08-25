@@ -94,4 +94,6 @@ static inline int pidfd_getfd(int pidfd __attribute__((unused)),
 }
 #endif
 
+extern int ul_pfd_validate_pfd_ino(int pfd, size_t pfd_ino);
+
 #endif /* UTIL_LINUX_PIDFD_UTILS */
