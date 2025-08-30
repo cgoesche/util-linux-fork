@@ -822,6 +822,12 @@ static void __attribute__((__noreturn__)) usage(void)
 	fputs(USAGE_SEPARATOR, out);
 	fputs(_(" -H, --list-columns     list the available columns\n"), out);
 	fprintf(out, USAGE_HELP_OPTIONS(24));
+
+	fputs(USAGE_COLUMNS, out);
+	size_t i;
+	for (i = 0; i < ARRAY_SIZE(infos); i++)
+		fprintf(out, " %10s  %s\n", infos[i].name, _(infos[i].help));
+
 	fprintf(out, USAGE_MAN_TAIL("lslocks(8)"));
 
 	exit(EXIT_SUCCESS);
@@ -952,6 +958,8 @@ int main(int argc, char *argv[])
 		columns[ncolumns++] = COL_PATH;
 	}
 
+	if (!outarg)
+		outarg = getenv("LSLOCKS_COLUMNS");
 	if (outarg && string_add_to_idarray(outarg, columns, ARRAY_SIZE(columns),
 					 &ncolumns, column_name_to_id) < 0)
 		return EXIT_FAILURE;
