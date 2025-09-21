@@ -320,6 +320,39 @@ const char *scols_column_get_name(struct libscols_column *cl)
 }
 
 /**
+ * scols_column_set_description:
+ * @cl: a pointer to a struct libscols_column instance
+ * @description: column description
+ *
+ * Returns: 0, a negative value in case of an error.
+ *
+ * Since: 2.42
+ */
+int scols_column_set_description(struct libscols_column *cl, const char *description)
+{
+	int rc = 0;
+
+	if (!description)
+		return -1;
+
+	cl->description = (char *) description;
+	return rc;
+}
+
+/**
+ * scols_column_get_description:
+ * @cl: a pointer to a struct libscols_column instance
+ *
+ * Returns: A pointer to a column description, which is stored in column description
+ *
+ * Since: 2.42
+ */
+const char *scols_column_get_description(struct libscols_column *cl)
+{
+	return cl->description;
+}
+
+/**
  * scols_column_set_headercolor:
  * @cl: a pointer to a struct libscols_column instance
  * @color: color name or ESC sequence
