@@ -34,34 +34,36 @@ _dmesg_module()
 	esac
 	OPTS="--buffer-size
 		--clear
-                --color
-                --console-level
-                --console-off
-                --console-on
-                --ctime
-                --decode
-                --facility
-                --file
-                --follow
-                --follow-new
-                --help
-                --human
-                --json
-                --kernel
-                --level
-                --noescape
-                --nopager
-                --notime
-                --raw
-                --read-clear
-                --reltime
-                --show-delta
-                --since
-                --syslog
-                --time-format
-                --until
-                --userspace
-                --version"
+		--color
+		--console-level
+		--console-off
+		--console-on
+		--ctime
+		--decode
+		--facility
+		--file
+		--follow
+		--follow-new
+		--force-prefix
+		--help
+		--human
+		--json
+		--kernel
+		--kmsg-file
+		--level
+		--noescape
+		--nopager
+		--notime
+		--raw
+		--read-clear
+		--reltime
+		--show-delta
+		--since
+		--syslog
+		--time-format
+		--until
+		--userspace
+		--version"
 	COMPREPLY=( $(compgen -W "${OPTS[*]}" -- $cur) )
 	return 0
 }
