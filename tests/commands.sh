@@ -67,6 +67,9 @@ TS_HELPER_PROCFS="${ts_helpersdir}test_procfs"
 TS_HELPER_TIMEUTILS="${ts_helpersdir}test_timeutils"
 TS_HELPER_KILL_PIDFDINO="${ts_helpersdir}test_kill_pidfdino"
 
+# tools
+TS_TOOLS_CHECKCOMPLETION="${ts_toolsdir}checkcompletion.sh"
+
 # paths to commands
 TS_CMD_ADDPART=${TS_CMD_ADDPART:-"${ts_commandsdir}addpart"}
 TS_CMD_DELPART=${TS_CMD_DELPART:-"${ts_commandsdir}delpart"}

@@ -344,8 +344,11 @@ function ts_init_env {
             . "$top_builddir/meson.conf"
         fi
 
-	# We use helpser always from build tree
+	# We use helpers always from build tree
 	ts_helpersdir="${top_builddir}/"
+
+	# We use tools from src tree
+	ts_toolsdir="${top_srcdir}/tools/"
 
 	TS_USE_SYSTEM_COMMANDS=$(ts_has_option "use-system-commands" "$*")
 	if [ "$TS_USE_SYSTEM_COMMANDS" == "yes" ]; then

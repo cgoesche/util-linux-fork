@@ -6,8 +6,10 @@
 # 2. All bash-completion files are registered in bash-completion/Makemodule.am
 # 3. All bash-completion files are registered in meson.build
 # 4. All bash-completion files correspond to actual programs
+# 5. All bash-completion files complete all program's long options
 #
 # Copyright (C) 2025 Karel Zak <kzak@redhat.com>
+# Copyright (C) 2025 Christian Goeschel Ndjomouo <cgoesc2@wgu.edu>
 #
 
 set -e
@@ -44,6 +46,12 @@ exclude_programs="nologin|agetty|login|sulogin|switch_root|vipw|line|kill"
 # - runuser: symlinked to su completion
 # - lastb: symlinked to last completion
 special_handling="runuser|lastb"
+
+# Programs that cannot adequately be covered by the integrity check in 
+# check_completion_file_integrity(), because they use a coding style
+# that differs from the one conventionally used in this project.
+# - pipesz: lists long options in $LOPTS without `--`
+ignore_integrity_check="pipesz"
 
 top_srcdir=${1:-.}
 [ -d "${top_srcdir}" ] || die "directory '${top_srcdir}' not found"
@@ -97,6 +105,34 @@ extract_meson_registered() {
 	fi
 }
 
+# Check for the bash-completion file integrity, i.e. all long options are completed
+# Argument(s): program_name
+check_completion_file_integrity() {
+	local prog="$1"
+
+	if "./$prog" --version &>/dev/null; then
+		prog_long_opts="$( "./$prog" --help \
+			| grep -o -P '[[:space:]]*--(?![^[:alpha:]])[A-Za-z-]*' \
+			| sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+			| sort \
+			| uniq )"
+
+		comp_opts="$( cat "${completion_dir}/${prog}" \
+				| grep -o -P '[[:space:]]*--(?![^[:alpha:]])[A-Za-z-]*' \
+				| sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+				| sort \
+				| uniq )"
+
+		res="$( comm -23 <(echo "${prog_long_opts}") <(echo "${comp_opts}") )"
+		if [ -n "$res" ]; then
+			printf "%s\n%s\n" "${prog}:" "$res"
+			return 1
+		fi
+	fi
+
+	return 0
+}
+
 # Get programs that should have completions
 programs=$(extract_programs | grep -v -w -E "(${exclude_programs}|${special_handling})")
 
@@ -146,6 +182,14 @@ if [ -n "$meson_unregistered" ]; then
 	echo "bash-completion files not registered in meson.build:"
 	echo "$meson_unregistered" | sed 's/^/  /'
 	errors=$((errors + 1))
+fi
+
+if [ $errors -eq 0 ]; then
+	for f in $files; do
+		if [[ -z "$ignore_integrity_check" || ! "$f" =~ $ignore_integrity_check ]]; then
+			check_completion_file_integrity "$f" || errors=$((errors + 1))
+		fi
+	done
 fi
 
 if [ $errors -eq 0 ]; then
