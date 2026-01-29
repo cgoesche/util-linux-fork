@@ -57,7 +57,7 @@ program_test_subdirs="$(ls -1 ${top_testdir} | tr '\n' ' ')"
 
 # All registered test scripts for all programs
 all_test_scripts="$(find "${top_testdir}/" -maxdepth 2 -type f -executable \
-			-exec grep -l 'ts_init' {} \; 2>/dev/null |
+			-exec realpath -qLs {} \; 2>/dev/null |
 			tr '\n' ' ')"
 
 function usage() {
