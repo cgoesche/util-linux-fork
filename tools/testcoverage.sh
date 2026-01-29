@@ -55,6 +55,11 @@ unsupported_programs='^blockdev$|^fsck$|^kill$|^mkfs\.cramfs$|^pg$|^renice$|^run
 # Each program has a dedicated subdirectory with test scripts
 program_test_subdirs="$(ls -1 ${top_testdir} | tr '\n' ' ')"
 
+# All registered test scripts for all programs
+all_test_scripts="$(find "${top_testdir}/" -maxdepth 2 -type f -executable \
+			-exec grep -l 'ts_init' {} \; 2>/dev/null |
+			tr '\n' ' ')"
+
 function usage() {
 	cat <<EOF
 Usage:
@@ -95,20 +100,39 @@ function get_test_scripts_long_opts() {
 	local prog test_scripts regex opts
 	prog="$1"
 	test_scripts="$2"
-	# shellcheck disable=SC2016
-	regex="[[:space:]]*--(?![^[:alnum:]])[A-Za-z-.0-9_]*"
 
+	# Look for all options in $prog test scripts
 	for ts in $test_scripts; do
-		found="$(grep -P -o "$regex" "${ts}" |
-			grep -P -o -- '--(?![^[:alnum:]])[A-Za-z-.0-9_]*' |
-			uniq)"
+		found="$(grep -P -o '[[:space:]]+--(?![^[:alnum:]])[A-Za-z-.0-9_]*' "${ts}" \
+			| grep -P -o -- '--(?![^[:alnum:]])[A-Za-z-.0-9_]*' \
+			| uniq)"
 
 		if [ -n "$found" ]; then
 			opts+="$(printf -- '\n%s' "$found")"
 		fi
 	done
 
-	echo "$opts" | uniq | sort
+	# Since we do "cross-testing", we check if $prog is being tested
+	# in other program's test scripts and store the found options too.
+	# shellcheck disable=SC2016
+	regex="$( printf '\$TS_CMD_%s[[:space:]]+.*[[:space:]]+--(?![^[:alnum:]])[A-Za-z-.0-9_]*' "${prog^^}" )"
+
+	for t in $all_test_scripts; do
+		# skip $prog's own test scripts, we checked them already
+		if [[ "$t" =~ \/$prog\/ ]]; then
+			continue
+		fi
+
+		found="$(grep -P -o "$regex" "${t}" \
+			| grep -P -o -- '--(?![^[:alnum:]])[A-Za-z-.0-9_]*' \
+			| uniq)"
+
+		if [ -n "$found" ]; then
+			opts+="$(printf -- '\n%s' "$found")"
+		fi
+	done
+
+	echo "$opts" | sort | uniq
 }
 
 function find_real_test_longopts_per_prog() {
