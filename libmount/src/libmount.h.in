@@ -254,7 +254,12 @@ enum {
  * failed to execute external program
  */
 #define MNT_ERR_EXEC	5014
-
+/**
+ * MNT_ERR_EXEC:
+ *
+ * failed to set current namespace stage
+ */
+#define MNT_ERR_NAMESPACE_STAGE	5015
 
 
 /*
