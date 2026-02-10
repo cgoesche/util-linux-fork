@@ -3247,6 +3247,21 @@ static void close_ns(struct libmnt_ns *ns)
 	ns->cache = NULL;
 }
 
+static int ns_switch_appropriate(struct libmnt_context *cxt)
+{
+	uint32_t curr_stage, flags;
+
+	if (!cxt)
+		return -EINVAL;
+
+	curr_stage = mnt_context_get_ns_curr_stage(cxt);
+	flags = cxt->ns_stage.flags;
+	if (flags & MNT_NS_STAGE_ALL || flags & curr_stage)
+		return 0;
+
+	return -1;
+}
+
 /**
  * mnt_context_set_target_ns:
  * @cxt: mount context
@@ -3460,6 +3475,33 @@ struct libmnt_ns *mnt_context_switch_target_ns(struct libmnt_context *cxt)
 	return mnt_context_switch_ns(cxt, mnt_context_get_target_ns(cxt));
 }
 
+/**/
+int mnt_context_set_ns_stage_flags(struct libmnt_context *cxt, uint32_t flags)
+{
+	if (!cxt)
+		return -EINVAL;
+
+	DBG(CXT, ul_debugobj(cxt, "setting namespace stage flags to %u", flags));
+	cxt->ns_stage.flags = flags;
+	return 0;
+}
+
+/**/
+int mnt_context_set_ns_curr_stage(struct libmnt_context *cxt, uint32_t stage)
+{
+	if (!cxt)
+		return -EINVAL;
+
+	DBG(CXT, ul_debugobj(cxt, "setting current namespace stage to %u", stage));
+	cxt->ns_stage.curr_stage = stage;
+	return 0;
+}
+
+/**/
+int mnt_context_get_ns_curr_stage(struct libmnt_context *cxt)
+{
+	return cxt->ns_stage.curr_stage;
+}
 
 #ifdef TEST_PROGRAM
 
