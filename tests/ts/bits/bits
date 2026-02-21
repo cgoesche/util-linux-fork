@@ -44,7 +44,7 @@ $TS_CMD_BITS -l 1,10000 >> $TS_OUTPUT 2>> $TS_ERRLOG
 ts_finalize_subtest
 
 ts_init_subtest "width"
-$TS_CMD_BITS -w 16384 -l 10000  >> $TS_OUTPUT 2>> $TS_ERRLOG
+$TS_CMD_BITS --width 16384 -l 10000  >> $TS_OUTPUT 2>> $TS_ERRLOG
 ts_finalize_subtest
 
 ts_init_subtest "width-truncate"
