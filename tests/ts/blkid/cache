@@ -39,10 +39,33 @@ ts_device_init
 	| sed -e "s|$TS_LODEV|DEVICE|" \
 	>> "$TS_OUTPUT" 2>> "$TS_ERRLOG"
 
-cat "$BLKID_FILE" \
+cat "$BLKID_FILE" | grep -E "$TS_LODEV" \
 	| sed -e 's/DEVNO="[^"]*"/DEVNO=""/' \
 	      -e 's/TIME="[^"]*"/TIME=""/' \
 	      -e "s|$TS_LODEV|DEVICE|" \
 	>> "$TS_OUTPUT"
+
+# Test the cache garbage collection by detaching the
+# previously registered loop device before garbage collection.
+# We expect $TS_LODEV (/dev/loopX) to not be present in $BLKID_FILE
+# anymore after the operation.
+
+# Initialize another loop device to keep atleast the previously 
+# attached one, we do this because otherwise the list of block devices
+# (blkid_cache->bic_devs) will be empty and that will prevent an update
+# of the cache. See libblkid/src/save.c:89
+ts_device_init
+
+# Update the cache with new loop device
+"$TS_CMD_BLKID" &>/dev/null
+
+ts_device_deinit "$TS_LODEV"
+
+LIBBLKID_DEBUG=all "$TS_CMD_BLKID" --garbage-collect >> "$TS_OUTPUT"
+
+if grep -E "$TS_LODEV" "$BLKID_FILE" &>/dev/null ; then
+	ts_failed "cache garbage collection failed"
+fi
+
 
 ts_finalize
