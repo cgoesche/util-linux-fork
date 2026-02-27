@@ -1,64 +1,113 @@
 _unshare_module()
 {
-	local cur prev OPTS
-	COMPREPLY=()
-	cur="${COMP_WORDS[COMP_CWORD]}"
-	prev="${COMP_WORDS[COMP_CWORD-1]}"
-	case $prev in
-		'--propagation')
-			COMPREPLY=( $(compgen -W "slave shared private unchanged" -- $cur) )
-			return 0
-			;;
-		'-s'|'--setgroups')
-			COMPREPLY=( $(compgen -W "allow deny" -- $cur) )
-			return 0
-			;;
-		'-h'|'--help'|'-V'|'--version')
-			return 0
-			;;
-	esac
-	case $cur in
-		-*)
-			OPTS="--mount
-				--uts
-				--ipc
-				--net
-				--pid
-				--user
-				--cgroup
-				--time
-				--fork
-				--forward-signals
-				--kill-child
-				--keep-caps
-				--mount-proc
-				--map-current-user
-				--map-root-user
-				--owner
-				--propagation
-				--setgroups
-				--help
-				--version
-				--root
-				--wd
-				--load-interp
-				--map-auto
-				--map-group
-				--map-groups
-				--map-user
-				--map-users
-				--map-subids
-				--mount-binfmt
-				--monotonic
-				--boottime
-				--setuid
-				--setgid"
+	local cur prev words cword OPTS NOARGOPTS OPTARGOPTS REQARGOPTS
+	_comp_initialize -n = -- "$@" || return
+	_comp_get_words -n = cur prev words cword
+	# We need to remove the '=' so that readline does not
+	# split the option argument into a separate token as
+	# this would have adverse effects on the mechanism we
+	# use to determine whether we are still completing
+	# unshare(1) or the wrapped command
+	COMP_WORDBREAKS=${COMP_WORDBREAKS//=/}
+
+	OPTARGOPTS="--mount=|--uts=|--ipc=|--net=|--pid=|--user=|--cgroup=|--time=|--kill-child=|\
+	--mount-proc=|--mount-binfmt="
+
+	REQARGOPTS="--owner|--propagation|--setgroups|--root|--wd|--load-interp|--map-group|\
+	--map-groups|--map-user|--map-users|--map-subids|--monotonic|--boottime|--setuid|--setgid"
+
+	REQARGOPTS_SHORT="-R|-w|-S|-G"
+
+	NOARGOPTS="--fork|--forward-signals|--map-root-user|--map-current-user|--map-auto|\
+	--map-subids|--keep-caps|--help|--version|${OPTARGOPTS//=/}"
+
+	NOARGOPTS_SHORT="-r|-f|-c|-h|-V|-m|-u|-i|-n|-p|-U|-C|-T"
+
+	
+
+	OPTS="${NOARGOPTS//[|]/ } ${NOARGOPTS_SHORT//[|]/ } ${OPTARGOPTS//[|]/ }\
+	${OPTARGOPTS_SHORT//[|]/ } ${REQARGOPTS//[|]/ } ${REQARGOPTS_SHORT//[|]/ }"
+
+	# Check if we are still completing unshare(1) and set 
+	# the offset so that it points to the command that is
+	# going to be executed, in order to complete it with
+	# its own completion specification.
+	local offset=0 i
+	for ((i = 1; i < COMP_CWORD; i++)); do
+		if [[ "${COMP_WORDS[i]}" =~ ^($NOARGOPTS|$NOARGOPTS_SHORT)$ ]]; then
+			continue
+		elif [[ "${COMP_WORDS[i]}" =~ ^$OPTARGOPTS.* ]]; then
+			continue
+		elif [[ "${COMP_WORDS[i]}" =~ ^($REQARGOPTS|$REQARGOPTS_SHORT)$ ]]; then
+			[[ "${COMP_WORDS[$((i+1))]}" != -* ]] && ((i++))
+			continue
+		fi
+		offset=$i
+		break
+	done
+
+	if (( offset > 0 )); then
+		# Find completion specification for the wrapped command
+		_comp_command_offset $offset
+	else
+		# $OPTARGOPTS deserve special treatment due
+		# to the '=' that delimits the actual argument
+		# that we wish to complete and the option name
+		if [[ "$cur" =~ ^$OPTARGOPTS.* ]]; then
+        		# Cut also backslash before '=' in case it ended up there
+        		# for some reason.
+        		prev=${cur%%?(\\)=*}
+        		cur=${cur#*=}
+
+			case $prev in
+				'--kill-child')
+					COMPREPLY=( $(compgen -P "$prev=" -A signal -- $cur) )
+					return 0
+					;;
+				*)
+					COMPREPLY=( $(compgen -P "$prev=" -f -- $cur) )
+					return 0
+					;;
+			esac
+    		fi
+
+		case $prev in
+			'--propagation')
+				COMPREPLY=( $(compgen -W "slave shared private unchanged" -- $cur) )
+				return 0
+				;;
+			'-s'|'--setgroups')
+				COMPREPLY=( $(compgen -W "allow deny" -- $cur) )
+				return 0
+				;;
+			'-w'|'--wd'|'-l'|'--load-interp'|'-R'|'--root')
+				# It's better than simply using 'compgen -f',
+				# because it honours spaces in filenames.
+				_comp_compgen_filedir
+				return 0
+				;;
+			'-S'|'--setuid')
+				UIDS="$(awk -F: '{print $3}' /etc/passwd | sort --numeric-sort)"
+				COMPREPLY=( $(compgen -W "$UIDS" -- $cur) )
+				return 0
+				;;
+			'-G'|'--setgid')
+				GIDS="$(awk -F: '{print $3}' /etc/group | sort --numeric-sort)"
+				COMPREPLY=( $(compgen -W "$GIDS" -- $cur) )
+				return 0
+				;;
+			'-h'|'--help'|'-V'|'--version')
+				return 0
+				;;
+		esac
+
+		if [[ "$cur" == -* ]]; then
 			COMPREPLY=( $(compgen -W "${OPTS[*]}" -- $cur) )
 			return 0
-			;;
-	esac
-	compopt -o bashdefault
-	COMPREPLY=( $(compgen -c -- $cur) )
+		else
+			_comp_compgen_commands
+		fi
+	fi
 	return 0
 }
-complete -F _unshare_module unshare
+complete -F _unshare_module -o bashdefault -o default unshare
