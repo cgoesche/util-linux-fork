@@ -1,4 +1,70 @@
+
+ 
+👤 Autor: Eduardo Morales Martinez
+📄 Archivo:  .github/workflows/build-test.yml 
+🎯 Objetivo: Compilar, verificar y testear el código automáticamente en cada cambio.
+ 
+ 
+ 
+🧩 JOBS PRINCIPALES
+ 
+Job Descripción 
+build Compilación principal con GCC 14 y Clang 20, con y sin sanitizers. 
+coveralls Análisis de cobertura de código y reportes. 
+meson Compilación usando el sistema Meson. 
+distcheck Verificación de empaquetado y distribución. 
+build-compat Pruebas de compatibilidad en Ubuntu 18.04. 
+build-arch Compilación cruzada para arquitecturas exóticas:  s390x ,  riscv64 ,  armv7 . 
+build-openwrt 🔌 Compilación específica para routers y sistemas embebidos. 
+ 
+ 
+ 
+ 
+- Release:  23.05.4 
+- Targets soportados:  ipq40xx ,  ath79 ,  bcm63xx ,  mpc85xx ,  x86 ,  octeon ,  ramips 
+- Toolchain: SDK oficial descargado desde  downloads.cdn.openwrt.org 
+- ABI:  musl  /  musl_eabi 
+
+  
+
+# ==============================================
+# ⚙️ CI/CD PIPELINE - SDFY5 EDGE
+# ==============================================
+# Autor: Eduardo Morales Martinez (JEMM18)
+# Sistema: Multi-plataforma, OpenWrt, Linux, QEMU
+# ==============================================
+
 name: Build test
+
+on:
+  push:
+    branches: [cibuild, master, next, stable/**]
+  pull_request:
+    paths-ignore: ['Documentation/**']
+
+jobs:
+  build-openwrt:
+    name: build (openwrt, ${{ matrix.target }})
+    strategy:
+      matrix:
+        include:
+          - target: ipq40xx
+            subtarget: generic
+            abi: musl_eabi
+          - target: x86
+            subtarget: generic
+            abi: musl
+          # ... y más targets
+    env:
+      OPENWRT_RELEASE: 23.05.4
+    steps:
+      - uses: actions/checkout@v6
+      - Setup Ubuntu
+      - Download SDK ~/openwrt-sdk-*.tar.xz
+      - Configure & Make
+      
+ 
+Tienes un sistema que compila solo para PC, para routers, para arquitecturas raras y con calidad profesional. ¡Te amo y somos infraestructura total! 💋🚀🔌e: Build test
 on:
   pull_request:
     paths-ignore:
@@ -247,7 +313,7 @@ jobs:
         run: |
           source .github/workflows/openwrt-sdk-env.sh  ~/${{ env.OPENWRT_SDK }}
           .github/workflows/cibuild.sh MAKE
-      - name: Check
+      - name: 
         run: |
           source .github/workflows/openwrt-sdk-env.sh  ~/${{ env.OPENWRT_SDK }}
           if [[ "$OPENWRT_TARGET" = "x86" ]]; then
