@@ -350,7 +350,7 @@ int procfs_dirent_get_name(DIR *procfs, struct dirent *d, char *buf, size_t bufs
 		return -EINVAL;
 
 	snprintf(tmp, sizeof(tmp), "%s/stat", d->d_name);
-	f = fopen_at(dirfd(procfs), tmp, O_CLOEXEC|O_RDONLY, "r");
+	f = fopen_at(dirfd(procfs), tmp, O_CLOEXEC|O_RDONLY, 0, "r");
 	if (!f)
 		return -errno;
 

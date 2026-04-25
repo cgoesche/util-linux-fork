@@ -35,9 +35,9 @@ static inline FILE *xfmkstemp(char **tmpname, const char *dir, const char *prefi
 
 #ifdef HAVE_OPENAT
 static inline FILE *fopen_at(int dir, const char *filename,
-                             int flags, const char *mode)
+                             int flags, mode_t open_mode, const char *mode)
 {
-	int fd = openat(dir, filename, flags);
+	int fd = openat(dir, filename, flags, open_mode);
 	FILE *ret;
 
 	if (fd < 0)
