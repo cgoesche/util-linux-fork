@@ -71,6 +71,7 @@
 #include "pty-session.h"
 #include "debug.h"
 #include "shells.h"
+#include "fileutils.h"
 
 static UL_DEBUG_DEFINE_MASK(script);
 UL_DEBUG_DEFINE_MASKNAMES(script) = UL_DEBUG_EMPTY_MASKNAMES;
@@ -147,7 +148,8 @@ struct script_control {
 		flush,		/* flush after each write */
 		quiet,		/* suppress most output */
 		force,		/* write output to links */
-		isterm;		/* is child process running as terminal */
+		isterm,		/* is child process running as terminal */
+		no_symlink;
 };
 
 static ssize_t log_info(struct script_control *ctl, const char *name, const char *msgfmt, ...)
@@ -282,6 +284,31 @@ static struct script_log *log_associate(struct script_control *ctl,
 	return log;
 }
 
+static int log_open(struct script_control *ctl, struct script_log *log)
+{
+	int flags;
+
+	DBG(MISC, ul_debug("opening %s", log->filename));
+
+
+	flags = O_CREAT | O_WRONLY | O_CLOEXEC;
+	flags |= ctl->append && log->format == SCRIPT_FMT_RAW ?
+			O_APPEND : O_TRUNC;
+	flags |= ctl->no_symlink ? O_NOFOLLOW : 0;
+	/* open the log */
+	errno = 0;
+	log->fp = fopen_at(AT_FDCWD, log->filename, flags,
+			S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH,
+			ctl->append && log->format == SCRIPT_FMT_RAW ?
+			"a" UL_CLOEXECSTR :
+			"w" UL_CLOEXECSTR);
+	if (!log->fp) {
+		warn(_("cannot open %s"), log->filename);
+		return -errno;
+	}
+	return 0;
+}
+
 static int log_close(struct script_control *ctl,
 		      struct script_log *log,
 		      const char *msg,
@@ -376,22 +403,13 @@ static void log_free(struct script_control *ctl, struct script_log *log)
 static int log_start(struct script_control *ctl,
 		      struct script_log *log)
 {
+	int rc;
 	if (log->initialized)
 		return 0;
 
-	DBG(MISC, ul_debug("opening %s", log->filename));
-
-	assert(log->fp == NULL);
-
-	/* open the log */
-	log->fp = fopen(log->filename,
-			ctl->append && log->format == SCRIPT_FMT_RAW ?
-			"a" UL_CLOEXECSTR :
-			"w" UL_CLOEXECSTR);
-	if (!log->fp) {
-		warn(_("cannot open %s"), log->filename);
-		return -errno;
-	}
+	rc = log_open(ctl, log);
+	if (rc)
+		return rc;
 
 	/* write header, etc. */
 	switch (log->format) {
@@ -772,6 +790,7 @@ int main(int argc, char **argv)
 	const char *timingfile = NULL, *shell = NULL;
 	char **cmd_argv = NULL;
 	int cmd_argc = 0;
+	struct script_log *log = NULL;
 
 	enum { FORCE_OPTION = CHAR_MAX + 1 };
 
@@ -930,13 +949,15 @@ int main(int argc, char **argv)
 			outfile = argv[0];
 			argc--;
 			argv++;
+			log_associate(&ctl, &ctl.out, outfile, SCRIPT_FMT_RAW);
 		} else {
-			die_if_link(&ctl, DEFAULT_TYPESCRIPT_FILENAME);
-			outfile = DEFAULT_TYPESCRIPT_FILENAME;
+			log = log_associate(&ctl, &ctl.out,
+					DEFAULT_TYPESCRIPT_FILENAME, SCRIPT_FMT_RAW);
+			ctl.no_symlink = 1;
+			rc = log_open(&ctl, log);
+			if (rc)
+				err(EXIT_FAILURE, _("failed to setup default logfile %s"), DEFAULT_TYPESCRIPT_FILENAME);
 		}
-
-		/* associate stdout with typescript file */
-		log_associate(&ctl, &ctl.out, outfile, SCRIPT_FMT_RAW);
 	}
 
 	/* concat arguments after "--" as command */
