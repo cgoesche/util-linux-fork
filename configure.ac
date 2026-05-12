@@ -1913,6 +1913,15 @@ UL_REQUIRES_HAVE([lsfd], [bpf_obj_name_len], [BPF_OBJ_NAME_LEN macro in linux/bp
 UL_REQUIRES_HAVE([lsfd], [bpf_tag_size], [BPF_TAG_SIZE macro in linux/bpf.h])
 AM_CONDITIONAL([BUILD_LSFD], [test "x$build_lsfd" = xyes])
 
+AC_ARG_ENABLE([lslimits],
+  AS_HELP_STRING([--disable-lslimits], [do not build lslimits]),
+  [], [UL_DEFAULT_ENABLE([lslimits], [check])]
+)
+UL_BUILD_INIT([lslimits])
+UL_REQUIRES_LINUX([lslimits])
+UL_REQUIRES_BUILD([lslimits], [libsmartcols])
+AM_CONDITIONAL([BUILD_LSLIMITS], [test "x$build_lslimits" = xyes])
+
 AC_ARG_ENABLE([lslogins],
   AS_HELP_STRING([--disable-lslogins], [do not build lslogins]),
   [], [UL_DEFAULT_ENABLE([lslogins], [check])]

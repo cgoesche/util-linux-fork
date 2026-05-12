@@ -1050,6 +1050,7 @@ subdir('text-utils')
 subdir('term-utils')
 subdir('lsfd-cmd')
 subdir('lsblk-cmd')
+subdir('lslimits-cmd')
 subdir('po')
 
 includes = [dir_include,
@@ -1197,6 +1198,22 @@ if opt and not is_disabler(exe)
   exes += exe
   manadocs += newgrp_manadocs
   bashcompletions += ['newgrp']
+endif
+
+opt = get_option('build-lslimits').allowed()
+exe = executable(
+  'lslimits',
+  lslimits_sources,
+  include_directories : includes,
+  link_with : [lib_common,
+               lib_smartcols],
+  install_dir : usrbin_exec_dir,
+  install : opt,
+  build_by_default : opt)
+if opt and not is_disabler(exe)
+  exes += exe
+  manadocs += lslimits_manadocs
+  bashcompletions += ['lslimits']
 endif
 
 opt = get_option('build-lslogins').allowed()

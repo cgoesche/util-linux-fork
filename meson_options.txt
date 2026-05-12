@@ -129,6 +129,8 @@ option('build-hwclock', type : 'feature',
        description : 'build hwclock')
 option('build-lslogins', type : 'feature',
        description : 'build lslogins')
+option('build-lslimits', type : 'feature',
+       description : 'build lslimits')
 option('build-wdctl', type : 'feature',
        description : 'build wdctl')
 option('build-cal', type : 'feature',

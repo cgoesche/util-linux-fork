@@ -186,6 +186,9 @@ install-data-hook-bashcomp-lastb::
 	ln -sf last $(DESTDIR)$(bashcompletiondir)/lastb
 INSTALL_DATA_HOOKS += install-data-hook-bashcomp-lastb
 endif
+if BUILD_LSLIMITS
+dist_bashcompletion_DATA += bash-completion/lslimits
+endif
 if BUILD_LSLOGINS
 dist_bashcompletion_DATA += bash-completion/lslogins
 endif
