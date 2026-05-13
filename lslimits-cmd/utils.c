@@ -13,27 +13,30 @@
  */
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <unistd.h>
 
 
 #include "lslimits.h"
 
 
-int res_flag_to_res_id(int flag)
+const char *rlimit_id_to_string(int id)
 {
-	int res_id = -1;
+	return rlimit_desc[id].name;
+}
 
-	switch (flag) {
-	case FL_RESOURCE_TYPE_CPU:
-		res_id = RESOURCE_TYPE_CPU;
-	case FL_RESOURCE_TYPE_MEM:
-		res_id = RESOURCE_TYPE_MEM;
-	case FL_RESOURCE_TYPE_FILE:
-		res_id = RESOURCE_TYPE_FILE;
-	case FL_RESOURCE_TYPE_PID:
-		res_id = RESOURCE_TYPE_PID;
-	default:
-		break;
-	}
-	return res_id;
+bool is_unlimited(uint64_t num)
+{
+	return num == LSLIMITS_UNLIMITED;
+}
+
+const char *lslimits_unit_names[_LSLIMITS_NUNITS] = {
+	[LSLIMITS_UNIT_BYTES] = "bytes",
+	[LSLIMITS_UNIT_COUNT] = "count",
+	[LSLIMITS_UNIT_SECS] = "seconds",
+};
+
+const char *unit_id_to_name(int id)
+{
+	return lslimits_unit_names[id];
 }

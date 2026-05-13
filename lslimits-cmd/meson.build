@@ -6,6 +6,7 @@ lslimits_sources = files(
   'memory.c',
   'pid.c',
   'process.c',
+  'resource.c',
   'rlimit.c',
   'utils.c',
   'lslimits.h',

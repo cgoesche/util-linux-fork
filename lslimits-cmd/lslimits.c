@@ -23,8 +23,9 @@
 
 #include "c.h"
 #include "cctype.h"
-#include "list.h"
+#include "libsmartcols.h"
 #include "nls.h"
+#include "strutils.h"
 #include "xalloc.h"
 #include "closestream.h"
 #include "column-list-table.h"
@@ -34,13 +35,6 @@
 #include "lslimits.h"
 #include "resource.h"
 
-enum {
-	COL_PID,
-	COL_MEM_MIN,
-	COL_MEM_MAX,
-	LSLIMITS_NCOLS
-};
-
 /*  */
 enum {
 	LSLIMITS_ASCII =	(1 << 0),
@@ -49,16 +43,24 @@ enum {
 	LSLIMITS_EXPORT =	(1 << 3),
 	LSLIMITS_TREE =		(1 << 4),
 	LSLIMITS_JSON =		(1 << 5),
-	LSLIMITS_SHELLVAR =	(1 << 6)
+	LSLIMITS_SHELLVAR =	(1 << 6),
 };
 
+enum {
+	COL_RESOURCE,
+	COL_LIMIT,
+	COL_CONTROLLER,
+	COL_LIMIT_SOURCE,
+	COL_UNIT,
+	LSLIMITS_NCOLS
+};
 
 /* Types used for qsort() and JSON */
 enum {
 	COLTYPE_STR	= 0,	/* default */
 	COLTYPE_NUM	= 1,	/* always u64 number */
 	COLTYPE_SORTNUM = 2,	/* string on output, u64 for qsort() */
-	COLTYPE_SIZE	= 3,	/* srring by default, number when --bytes */
+	COLTYPE_SIZE	= 3,	/* string by default, number when --bytes */
 	COLTYPE_BOOL	= 4	/* 0 or 1 */
 };
 
@@ -73,14 +75,19 @@ struct colinfo {
 
 /* columns descriptions */
 static const struct colinfo infos[] = {
-	[COL_PID] = { "PID", 6, SCOLS_FL_RIGHT, N_("process ID"), COLTYPE_NUM },
-	[COL_MEM_MIN] = { "MEMORY-MIN", 6, SCOLS_FL_RIGHT, N_("minimum memory usage"), COLTYPE_STR },
-	[COL_MEM_MAX] = { "MEMORY-MAX", 1, SCOLS_FL_RIGHT, N_("maximum memory usage"), COLTYPE_STR },
+	[COL_RESOURCE] = { "RESOURCE", 8, 0, N_("resource name"), COLTYPE_STR },
+	[COL_LIMIT] = { "LIMIT", 8, SCOLS_FL_RIGHT, N_("resource limit"), COLTYPE_SIZE },
+	[COL_CONTROLLER] = { "CONTROLLER", 10, SCOLS_FL_RIGHT, N_("limit controller type"), COLTYPE_STR },
+	[COL_LIMIT_SOURCE] = { "SOURCE", 10, SCOLS_FL_RIGHT, N_("limit source name/path"), COLTYPE_STR },
+	[COL_UNIT] = { "UNIT", 6, SCOLS_FL_RIGHT, N_("limit data unit"), COLTYPE_STR },
 };
 
 static const int default_columns[] = {
-	COL_PID,
-	COL_MEM_MIN,
+	COL_RESOURCE,
+	COL_LIMIT,
+	COL_CONTROLLER,
+	COL_LIMIT_SOURCE,
+	COL_UNIT,
 };
 
 static int columns[ARRAY_SIZE(infos) * 2];
@@ -90,9 +97,9 @@ static inline void add_column(int id)
 {
 	if (ncolumns >= ARRAY_SIZE(columns))
 		errx(EXIT_FAILURE, _("too many columns specified, "
-				     "the limit is %zu columns"),
+					"the limit is %zu columns"),
 				ARRAY_SIZE(columns) - 1);
-	columns[ ncolumns++ ] =  id;
+	columns[ncolumns++] =  id;
 }
 
 /* Converts column ID (COL_*) to column sequential number */
@@ -104,6 +111,12 @@ static int column_id_to_number(int id)
 		if (columns[i] == id)
 			return i;
 	return i;
+}
+
+static inline void add_uniq_column(int id)
+{
+	if (column_id_to_number(id) < 0)
+		add_column(id);
 }
 
 /* Converts column sequential number to column ID (COL_*) */
@@ -154,12 +167,88 @@ static int column_name_to_id(const char *name, size_t namesz)
 	return -1;
 }
 
-static inline void add_uniq_column(int id)
+static void add_scols_line(struct lslimits_ctx *ctx, struct resource *res)
 {
-	if (column_id_to_number(id) < 0)
-		add_column(id);
+	size_t i;
+	struct libscols_line *line;
+
+	line = scols_table_new_line(ctx->table, NULL);
+	if (!line)
+		err_oom();
+
+	uint64_t limit = get_verdict_limit_value(res);
+
+	for (i = 0; i < ncolumns; i++) {
+		char *str = NULL;
+
+		switch (get_column_id(i)) {
+		case COL_RESOURCE:
+			str = xstrdup(get_resource_name(res));
+			break;
+		case COL_LIMIT:
+			if (ctx->bytes) {
+				xasprintf(&str, "%"PRIu64, limit);
+			} else {
+				if (is_unlimited(limit))
+					str = xstrdup(LSLIMITS_UNLIMITED_STR);
+				else
+					str = size_to_human_string(SIZE_SUFFIX_3LETTER, limit);
+			}
+			break;
+		case COL_CONTROLLER:
+			str = xstrdup(get_verdict_controller(res));
+			break;
+		case COL_LIMIT_SOURCE:
+			str = xstrdup(get_verdict_source(res));
+			break;
+		case COL_UNIT:
+			str = xstrdup(unit_id_to_name(res->unit) );
+			break;
+		}
+
+		if (str && scols_line_refer_data(line, i, str) != 0)
+			err_oom();
+	}
 }
 
+static void fill_scols_table(struct lslimits_ctx *ctx)
+{
+	for (size_t i = 0; i < ARRAY_SIZE(ctx->proc->resources); i++) {
+		if (ctx->proc->resources[i] != NULL)
+			add_scols_line(ctx, ctx->proc->resources[i]);
+	}
+}
+
+static void initialize_table(struct lslimits_ctx *ctx)
+{
+	struct libscols_table *tb = scols_new_table();
+	if (!tb)
+		 err(EXIT_FAILURE, _("failed to allocate output table"));
+	if (ctx->json) {
+		scols_table_enable_json(tb, 1);
+		scols_table_set_name(tb, "lslimits");
+	}
+	if (ctx->raw)
+		scols_table_enable_raw(tb, 1);
+
+	ctx->table = tb;
+}
+
+static void initialize_table_cols(struct lslimits_ctx *ctx)
+{
+
+	for (size_t i = 0; i < ncolumns; i++) {
+		const struct colinfo *ci = get_column_info(i);
+		struct libscols_column *cl;
+
+		cl = scols_table_new_column(ctx->table, ci->name, ci->whint, ci->flags);
+		if (!cl)
+			err(EXIT_FAILURE, _("failed to initialize output column"));
+
+		if (ctx->annotate_col_headers && ci->help)
+			scols_column_refer_annotation(cl, ci->help);
+	}
+}
 
 static void __attribute__((__noreturn__)) list_columns(struct lslimits_ctx *ctx)
 {
@@ -196,6 +285,7 @@ static void __attribute__((__noreturn__)) usage(void)
 	fputsln(_("List various resource limits for a given PID."), stdout);
 
 	fputs(USAGE_OPTIONS, stdout);
+	fputsln(_(" -B, --bytes          show values in bytes"), stdout);
 	fputsln(_(" -c, --cpu            show CPU limits"), stdout);
 	fputsln(_(" -f, --file           show file limits"), stdout);
 	fputsln(_(" -d, --io             show IO limits"), stdout);
@@ -229,6 +319,7 @@ int main(int argc, char **argv)
 		OPT_ANNOTATE,
 	};
 	static const struct option longopts[] = {
+		{ "bytes",       no_argument,       NULL, 'B'            },
 		{ "cpu",       no_argument,       NULL, 'c'            },
 		{ "file",       no_argument,       NULL, 'f'            },
 		{ "io",       no_argument,       NULL, 'd'            },
@@ -248,8 +339,11 @@ int main(int argc, char **argv)
 	textdomain(PACKAGE);
 	close_stdout_atexit();
 
-	while ((c = getopt_long(argc, argv, "cdfHmnpVh", longopts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "BcdfHmnpVh", longopts, NULL)) != -1) {
 		switch (c) {
+		case 'B':
+			ctx->bytes = true;
+			break;
 		case 'c':
 			ctx->res_types |= FL_RESOURCE_TYPE_CPU;
 			break;
@@ -286,13 +380,13 @@ int main(int argc, char **argv)
 		}
 	}
 
+	if (collist)
+		list_columns(ctx);	/* print end exit */
+
 	if (argc - optind < 1) {
 		warnx(_("missing PID argument"));
 		errtryhelp(EXIT_FAILURE);
 	}
-
-	if (collist)
-		list_columns(ctx);        /* print end exit */
 
 	if (annotationwanted(annotate_opt_arg))
 		ctx->annotate_col_headers = true;
@@ -301,22 +395,33 @@ int main(int argc, char **argv)
 	if (pidfd_ino > 0)
 			pfd = ul_get_valid_pidfd_or_err(ctx->proc->pid, pidfd_ino);
 
-	rc = collect_rlimit_data(ctx->proc);
+	/* Add default columns to wanted columns */
+	for (size_t i = 0; i < ARRAY_SIZE(default_columns); i++) {
+		add_column(default_columns[i]);
+	}
+
+	scols_init_debug(0);
+
+	rc = proc_collect_rlimit_data(ctx->proc);
 	if (rc)
 		goto done;
 
 	init_proc_resources(ctx->proc, ctx->res_types);
 
-	for (size_t i = 0; i < ARRAY_SIZE(ctx->proc->rlimits); i++) {
-		uint64_t val = ctx->proc->rlimits[i].rlim.rlim_cur;
-		const char *name = ctx->proc->rlimits[i].desc->name;
-		printf("%20s\t%zu\n", name, val);
-	}
+	proc_make_verdicts(ctx->proc);
+
+
+	initialize_table(ctx);
+	initialize_table_cols(ctx);
+
+	fill_scols_table(ctx);
+	scols_print_table(ctx->table);
 
 done:
 	if (pfd)
 		close(pfd);
-
+	if (ctx->table)
+		scols_unref_table(ctx->table);
 	lslimits_free_context(ctx);
 	return EXIT_SUCCESS;
 }

@@ -24,6 +24,7 @@
 
 
 #include "c.h"
+#include "nls.h"
 #include "list.h"
 #include "debug.h"
 
@@ -43,6 +44,10 @@ UL_DEBUG_DECLARE_MASK(lslimits);
 #define FL_RESOURCE_TYPE_NET	(1 << 5)
 #define FL_RESOURCE_TYPE_PID	(1 << 6)
 
+#define LSLIMITS_UNLIMITED	MAX_OF_UINT_TYPE(uint64_t)
+#define LSLIMITS_UNLIMITED_STR	"unlimited"
+
+
 /* resource type ids */
 enum {
 	RESOURCE_TYPE_CPU,
@@ -54,12 +59,16 @@ enum {
 	_NRESOURCE_TYPES
 };
 
-/* data format type */
+/* data unit hint */
 enum {
-	LSLIMITS_BYTES,
-	LSLIMITS_COUNT,
-	LSLIMITS_MSECS,
+	LSLIMITS_UNIT_BYTES,
+	LSLIMITS_UNIT_COUNT,
+	LSLIMITS_UNIT_SECS,
+
+	_LSLIMITS_NUNITS
 };
+
+extern const char *lslimits_unit_names[_LSLIMITS_NUNITS];
 
 /* limit controller types */
 enum {
@@ -68,6 +77,7 @@ enum {
 
 	_NLIMIT_CONTROLLERS
 };
+
 
 /* RLIMIT specific stuff */
 
@@ -98,35 +108,16 @@ struct rlimit_description {
 	int resource;
 };
 
-static struct rlimit_description rlimit_desc[_NRLIMIT_RESOURCES] = {
-	[_RLIMIT_AS] = { .name = "RLIMIT_AS", .resource = RLIMIT_AS },
-	[_RLIMIT_CORE] = { .name = "RLIMIT_CORE", .resource = RLIMIT_CORE },
-	[_RLIMIT_CPU] = { .name = "RLIMIT_CPU", .resource = RLIMIT_CPU },
-	[_RLIMIT_DATA] = { .name = "RLIMIT_DATA", .resource = RLIMIT_DATA },
-	[_RLIMIT_FSIZE] = { .name = "RLIMIT_FSIZE", .resource = RLIMIT_FSIZE },
-	[_RLIMIT_LOCKS] = { .name = "RLIMIT_LOCKS", .resource = RLIMIT_LOCKS },
-	[_RLIMIT_MEMLOCK] = { .name = "RLIMIT_MEMLOCK", .resource = RLIMIT_MEMLOCK },
-	[_RLIMIT_MSGQUEUE] = { .name = "RLIMIT_MSGQUEUE", .resource = RLIMIT_MSGQUEUE },
-	[_RLIMIT_NICE] = { .name = "RLIMIT_NICE", .resource = RLIMIT_NICE },
-	[_RLIMIT_NOFILE] = { .name = "RLIMIT_NOFILE", .resource = RLIMIT_NOFILE },
-	[_RLIMIT_NPROC] = { .name = "RLIMIT_NPROC", .resource = RLIMIT_NPROC },
-	[_RLIMIT_RSS] = { .name = "RLIMIT_RSS", .resource = RLIMIT_RSS },
-	[_RLIMIT_RTPRIO] = { .name = "RLIMIT_RTPRIO", .resource = RLIMIT_RTPRIO },
-	[_RLIMIT_RTTIME] = { .name = "RLIMIT_RTTIME", .resource = RLIMIT_RTTIME },
-	[_RLIMIT_SIGPENDING] = { .name = "RLIMIT_SIGPENDING", .resource = RLIMIT_SIGPENDING },
-	[_RLIMIT_STACK] = { .name = "RLIMIT_STACK", .resource = RLIMIT_STACK },
-};
-
+extern struct rlimit_description rlimit_desc[_NRLIMIT_RESOURCES];
 
 struct proc_rlimit {
-	struct rlimit_description *desc;
+	const char *name;
+	int resource;
+
 	struct rlimit rlim;
 	uint64_t normalized_data;
 	int format_hint;
-	int type;
 };
-
-
 
 /* cgroupv2 specific stuff */
 struct proc_cgroup {
@@ -135,22 +126,14 @@ struct proc_cgroup {
 	/* payload */
 };
 
-struct limit_source {
-	union {
-		int rlimit_id;
-		struct proc_cgroup *cg;
-	} origin;
-
-	enum {
-		LIMIT_SOURCE_UNSET = 0,
-		LIMIT_SOURCE_RLIMIT,
-		LIMIT_SOURCE_CGROUP
-	} limit_source;
+struct absolute_limit {
+	uint64_t value;
+	const char *source;
 };
 
 struct lslimits_verdict {
-	uint64_t absolute_limit;
-	struct limit_source source;
+	struct absolute_limit abs_limit;
+	const char *controller;
 };
 
 struct process {
@@ -163,7 +146,7 @@ struct process {
 };
 
 struct limit_controller {
-	const char *name;	/* "RLIMIT", "CGROUPv2",... */
+	const char *name;	/* "RLIMIT", "CGROUPv2", "sysfs",... */
 	int type;		/*  LIMIT_CONTROLLER_* */
 
 	union {
@@ -171,9 +154,9 @@ struct limit_controller {
 		const char *name;
 	} target;
 
-	int (*get_absolute_limit)(struct limit_controller *ctrl,
+	int (*get_absolute_limit)(const struct limit_controller *ctrl,
 					struct process *proc,
-					uint64_t *abs_val);
+					struct absolute_limit *abs_lim);
 };
 
 struct lslimits_ctx {
@@ -182,9 +165,12 @@ struct lslimits_ctx {
 
 	struct process *proc;
 
+	struct libscols_table	*table;
+
 	bool	noheadings : 1,
 		raw  : 1,
 		json : 1,
+		bytes : 1,
 		annotate_col_headers : 1;
 };
 
@@ -197,10 +183,17 @@ extern void free_proc_rlimit(struct proc_rlimit *prlimit);
 
 /* process.c */
 extern void init_proc_resources(struct process *proc, int flags);
+extern int proc_collect_rlimit_data(struct process *proc);
+extern void proc_make_verdicts(struct process *proc);
+
+/* resource.c */
+extern const char *get_resource_name(struct resource *res);
+extern uint64_t get_verdict_limit_value(struct resource *res);
+extern const char *get_verdict_controller(struct resource *res);
+extern const char *get_verdict_source(struct resource *res);
 
 /* rlimit.c */
 extern int _init_rlimit(struct list_head *lims, int type);
-extern int collect_rlimit_data(struct process *proc);
 extern int get_curr_rlimit_resource(pid_t pid, int resource, struct rlimit *rlim);
 
 /* cpu.c */
@@ -208,7 +201,6 @@ extern void init_cpu_resource(struct resource **r);
 
 /* memory.c */
 extern void init_memory_resource(struct process *proc);
-extern void deinit_memory_resource(struct resource *res);
 
 /* io.c */
 extern void init_io_resource(struct resource **r);
@@ -221,6 +213,8 @@ extern void init_pid_resource(struct resource **r);
 
 
 /* utils.c */
-extern int res_flag_to_res_id(int flag);
+extern const char *rlimit_id_to_string(int id);
+extern bool is_unlimited(uint64_t num);
+extern const char *unit_id_to_name(int id);
 
 #endif /* UTIL_LINUX_LSLIMITS_H */

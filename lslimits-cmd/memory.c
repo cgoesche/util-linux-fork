@@ -24,33 +24,51 @@
 #include "lslimits.h"
 #include "resource.h"
 
-/* RLIMIT controller */
 
-static int rlimit_get_abs(struct limit_controller *ctrl, struct process *proc,
-				uint64_t *abs_val)
+static bool _memory_is_more_restrictive(struct absolute_limit *winner_lim, struct limit_controller *winner_ctrl,
+				struct absolute_limit *curr_lim, struct limit_controller *curr_ctrl)
+{
+
+	/* the more restrictive limit wins; always adopt the first result */
+	if (default_is_more_restrictive(curr_lim->value, winner_lim->value))
+		return true;
+
+	if (curr_lim->value == winner_lim->value
+				&& curr_ctrl->type == LIMIT_CONTROLLER_RLIMIT
+				&& winner_ctrl && winner_ctrl->type != LIMIT_CONTROLLER_RLIMIT)
+		return true;
+
+	return false;
+}
+
+/* RLIMIT controller */
+static int rlimit_get_absolute_limit(const struct limit_controller *ctrl, struct process *proc,
+				struct absolute_limit *abs_lim)
 {
 	int rc = 0;
 
 	assert(proc);
 	assert(ctrl);
-	assert(abs_val);
+	assert(abs_lim);
 
 	int target = ctrl->target.id;
 	struct rlimit *r = &proc->rlimits[target].rlim;
 
 	if (r->rlim_cur == RLIM_INFINITY)
-		*abs_val = MAX_OF_UINT_TYPE(uint64_t);
+		abs_lim->value = r->rlim_max == RLIM_INFINITY ? MAX_OF_UINT_TYPE(uint64_t) : (uint64_t)r->rlim_max;
 	else
-		*abs_val = (uint64_t)r->rlim_cur;
+		abs_lim->value = (uint64_t)r->rlim_cur;
+
+	abs_lim->source = rlimit_id_to_string(target);
 
 	return rc;
 }
 
-const struct limit_controller rlimit_controller = {
+static const struct limit_controller rlimit_controller = {
 	.name = "RLIMIT",
 	.type = LIMIT_CONTROLLER_RLIMIT,
 	.target.id = _RLIMIT_AS,
-	.get_absolute_limit = rlimit_get_abs,
+	.get_absolute_limit = rlimit_get_absolute_limit,
 };
 
 static int init_limit_controllers(struct resource *res)
@@ -64,25 +82,28 @@ static int init_limit_controllers(struct resource *res)
 	return rc;
 }
 
+static void deinitialize_memory_resource(struct resource *res)
+{
+	free(res);
+	return;
+}
+
 void init_memory_resource(struct process *proc)
 {
-	assert(proc);
-
 	int type = RESOURCE_TYPE_MEM;
 
+	assert(proc);
+	assert(proc->resources[type] == NULL);
+
 	struct resource *res = xmalloc(sizeof(struct resource));
-	res->name = res_def[type].name;
-	res->type = type;
+	res->name = resource_desc[type].name;
+	res->unit = resource_desc[type].unit;
+	res->is_more_restrictive = _memory_is_more_restrictive;	/* this is the deciding policy */
+	res->deinitialize = deinitialize_memory_resource;
 
 	init_limit_controllers(res);
 
 	proc->resources[type] = res;
-}
-
-void deinit_memory_resource(struct resource *res)
-{
-	free(res);
-	return;
 }
 
 
