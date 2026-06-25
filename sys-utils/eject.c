@@ -81,7 +81,7 @@ struct eject_control {
 	bool	 			/* command flags and arguments */
 		show_dflt_dev,		/* show default device (--default option) */
 		force,
-		f_option,
+		use_floppy,		/* use floppy disk eject command */
 		i_option,
 		M_option,
 		m_option,
@@ -219,7 +219,7 @@ static void parse_args(struct eject_control *ctl, int argc, char **argv)
 			ctl->show_dflt_dev = true;
 			break;
 		case 'f':
-			ctl->f_option = 1;
+			ctl->use_floppy = true;
 			break;
 		case 'F':
 			ctl->force = true;
@@ -1016,8 +1016,8 @@ int main(int argc, char **argv)
 	}
 
 	/* if user did not specify type of eject, try all four methods */
-	if (ctl.r_option + ctl.s_option + ctl.f_option + ctl.q_option == 0)
-		ctl.r_option = ctl.s_option = ctl.f_option = ctl.q_option = 1;
+	if (ctl.r_option + ctl.s_option + ctl.use_floppy + ctl.q_option == false)
+		ctl.r_option = ctl.s_option = ctl.use_floppy = ctl.q_option = true;
 
 	/* open device */
 	open_device(&ctl);
@@ -1037,7 +1037,7 @@ int main(int argc, char **argv)
 				 _("SCSI eject failed"));
 	}
 
-	if (ctl.f_option && !worked) {
+	if (ctl.use_floppy && !worked) {
 		verbose(&ctl, _("%s: trying to eject using floppy eject command"), ctl.device);
 		worked = eject_floppy(ctl.fd);
 		verbose(&ctl, worked ? _("floppy eject command succeeded") :
