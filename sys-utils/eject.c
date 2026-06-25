@@ -79,7 +79,7 @@ struct eject_control {
 		auto_mode;		/* auto eject mode, if not needed -1 */
 
 	bool	 			/* command flags and arguments */
-		d_option,
+		show_dflt_dev,		/* show default device (--default option) */
 		F_option,
 		f_option,
 		i_option,
@@ -216,7 +216,7 @@ static void parse_args(struct eject_control *ctl, int argc, char **argv)
 			ctl->x_arg = strtoul_or_err(optarg, _("invalid argument to --cdspeed/-x option"));
 			break;
 		case 'd':
-			ctl->d_option = 1;
+			ctl->show_dflt_dev = true;
 			break;
 		case 'f':
 			ctl->f_option = 1;
@@ -868,7 +868,7 @@ int main(int argc, char **argv)
 	parse_args(&ctl, argc, argv);
 
 	/* handle -d option */
-	if (ctl.d_option) {
+	if (ctl.show_dflt_dev) {
 		info(_("default device: `%s'"), EJECT_DEFAULT_DEVICE);
 		return EXIT_SUCCESS;
 	}
