@@ -80,7 +80,7 @@ struct eject_control {
 
 	bool	 			/* command flags and arguments */
 		show_dflt_dev,		/* show default device (--default option) */
-		F_option,
+		force,
 		f_option,
 		i_option,
 		M_option,
@@ -222,7 +222,7 @@ static void parse_args(struct eject_control *ctl, int argc, char **argv)
 			ctl->f_option = 1;
 			break;
 		case 'F':
-			ctl->F_option = 1;
+			ctl->force = true;
 			break;
 		case 'i':
 			ctl->i_option = 1;
@@ -691,7 +691,7 @@ static void umount_one(const struct eject_control *ctl, const char *name)
 /* Open a device file. */
 static void open_device(struct eject_control *ctl)
 {
-	int extra = ctl->F_option == 0 &&		/* never use O_EXCL on --force */
+	int extra = ctl->force == 0 &&		/* never use O_EXCL on --force */
 		    ctl->force_exclusive ? O_EXCL : 0;
 
 	ctl->fd = open(ctl->device, O_RDWR | O_NONBLOCK | extra);
@@ -924,7 +924,7 @@ int main(int argc, char **argv)
 		verbose(&ctl, _("%s: is whole-disk device"), ctl.device);
 	}
 
-	if (ctl.F_option == 0 && is_ejectable(&ctl) == 0)
+	if (ctl.force == 0 && is_ejectable(&ctl) == 0)
 		errx(EXIT_FAILURE, _("%s: is not ejectable device"), ctl.device);
 
 	/* handle -n option */
