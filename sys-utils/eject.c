@@ -75,14 +75,15 @@
 struct eject_control {
 	struct libmnt_table *mtab;
 	char *device;			/* device or mount point to be ejected */
+
 	int 	fd,			/* file descriptor for device */
-		auto_mode;		/* auto eject mode, if not needed -1 */
+		auto_mode,		/* auto eject mode, if not needed -1 */
+		no_manual_eject;	/* toggle manual eject on/off, if not used -1 */
 
 	bool	 			/* command flags and arguments */
 		show_dflt_dev,		/* show default device (--default option) */
 		force,
 		use_floppy,		/* use floppy disk eject command */
-		i_option,
 		M_option,
 		m_option,
 		n_option,
@@ -94,8 +95,7 @@ struct eject_control {
 		t_option,
 		v_option,
 		X_option,
-		x_option,
-		i_arg;
+		x_option;
 
 	unsigned int force_exclusive;	/* use O_EXCL */
 
@@ -225,8 +225,7 @@ static void parse_args(struct eject_control *ctl, int argc, char **argv)
 			ctl->force = true;
 			break;
 		case 'i':
-			ctl->i_option = 1;
-			ctl->i_arg = ul_parse_switch(optarg, "on", "off",  "1", "0",  NULL);
+			ctl->no_manual_eject = ul_parse_switch(optarg, "on", "off",  "1", "0",  NULL);
 			break;
 		case 'm':
 			ctl->m_option = 1;
@@ -331,7 +330,7 @@ static void auto_eject(const struct eject_control *ctl)
  */
 static void manual_eject(const struct eject_control *ctl)
 {
-	if (ioctl(ctl->fd, CDROM_LOCKDOOR, ctl->i_arg) < 0) {
+	if (ioctl(ctl->fd, CDROM_LOCKDOOR, ctl->no_manual_eject) < 0) {
 		switch (errno) {
 		case EDRIVE_CANT_DO_THIS:
 			errx(EXIT_FAILURE, _("CD-ROM door lock is not supported"));
@@ -342,10 +341,9 @@ static void manual_eject(const struct eject_control *ctl)
 		}
 	}
 
-	if (ctl->i_arg)
-		info(_("CD-Drive may NOT be ejected with device button"));
-	else
-		info(_("CD-Drive may be ejected with device button"));
+	info(ctl->no_manual_eject ? _("CD-Drive may NOT be ejected with device button") :
+				_("CD-Drive may be ejected with device button"));
+
 }
 
 /*
@@ -935,7 +933,7 @@ int main(int argc, char **argv)
 	}
 
 	/* handle -i option */
-	if (ctl.i_option) {
+	if (ctl.no_manual_eject >= 0) {
 		open_device(&ctl);
 		manual_eject(&ctl);
 		goto done;
