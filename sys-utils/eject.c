@@ -75,9 +75,10 @@
 struct eject_control {
 	struct libmnt_table *mtab;
 	char *device;			/* device or mount point to be ejected */
-	int fd;				/* file descriptor for device */
+	int 	fd,			/* file descriptor for device */
+		auto_mode;		/* auto eject mode, if not needed -1 */
+
 	bool	 			/* command flags and arguments */
-		a_option,
 		c_option,
 		d_option,
 		F_option,
@@ -95,7 +96,6 @@ struct eject_control {
 		v_option,
 		X_option,
 		x_option,
-		a_arg,
 		i_arg;
 
 	unsigned int force_exclusive;	/* use O_EXCL */
@@ -207,8 +207,7 @@ static void parse_args(struct eject_control *ctl, int argc, char **argv)
 				"a:c:i:x:dfFhnqrstTXvVpmM", long_opts, NULL)) != -1) {
 		switch (c) {
 		case 'a':
-			ctl->a_option = 1;
-			ctl->a_arg = ul_parse_switch(optarg, "on", "off",  "1", "0",  NULL);
+			ctl->auto_mode = ul_parse_switch(optarg, "on", "off",  "1", "0",  NULL);
 			break;
 		case 'c':
 			ctl->c_option = 1;
@@ -315,7 +314,7 @@ static void auto_eject(const struct eject_control *ctl)
 	int status = -1;
 
 #if defined(CDROM_SET_OPTIONS) && defined(CDROM_CLEAR_OPTIONS)
-	if (ctl->a_arg)
+	if (ctl->auto_mode == 1)
 		status = ioctl(ctl->fd, CDROM_SET_OPTIONS, CDO_AUTO_EJECT);
 	else
 		status = ioctl(ctl->fd, CDROM_CLEAR_OPTIONS, CDO_AUTO_EJECT);
@@ -856,7 +855,10 @@ int main(int argc, char **argv)
 	char *disk = NULL;
 	char *mountpoint = NULL;
 	int worked = 0;    /* set to 1 when successfully ejected */
-	struct eject_control ctl = { .fd = -1 };
+	struct eject_control ctl = {
+		.auto_mode = -1,
+		.fd = -1
+	};
 
 	setlocale(LC_ALL,"");
 	bindtextdomain(PACKAGE, LOCALEDIR);
@@ -941,11 +943,10 @@ int main(int argc, char **argv)
 	}
 
 	/* handle -a option */
-	if (ctl.a_option) {
-		if (ctl.a_arg)
-			verbose(&ctl, _("%s: enabling auto-eject mode"), ctl.device);
-		else
-			verbose(&ctl, _("%s: disabling auto-eject mode"), ctl.device);
+	if (ctl.auto_mode >= 0) {
+		verbose(&ctl, ctl.auto_mode ? _("%s: enabling auto-eject mode") :
+						_("%s: disabling auto-eject mode"), ctl.device);
+
 		open_device(&ctl);
 		auto_eject(&ctl);
 		goto done;
