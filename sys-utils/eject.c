@@ -84,8 +84,8 @@ struct eject_control {
 		show_dflt_dev,		/* show default device (--default option) */
 		force,
 		use_floppy,		/* use floppy disk eject command */
-		M_option,
-		m_option,
+		no_part_unmount,
+		no_unmount,
 		n_option,
 		p_option,
 		q_option,
@@ -228,10 +228,10 @@ static void parse_args(struct eject_control *ctl, int argc, char **argv)
 			ctl->no_manual_eject = ul_parse_switch(optarg, "on", "off",  "1", "0",  NULL);
 			break;
 		case 'm':
-			ctl->m_option = 1;
+			ctl->no_unmount = true;
 			break;
 		case 'M':
-			ctl->M_option = 1;
+			ctl->no_part_unmount = true;
 			break;
 		case 'n':
 			ctl->n_option = 1;
@@ -793,7 +793,7 @@ static int umount_partitions(struct eject_control *ctl)
 
 			if (dev && device_get_mountpoint(ctl, &dev, &mnt) == 0) {
 				verbose(ctl, _("%s: mounted on %s"), dev, mnt);
-				if (!ctl->M_option)
+				if (!ctl->no_part_unmount)
 					umount_one(ctl, mnt);
 				count++;
 			}
@@ -985,13 +985,13 @@ int main(int argc, char **argv)
 	 * mountpoint if -M is specified, otherwise print error of another
 	 * partition is mounted.
 	 */
-	if (!ctl.m_option) {
+	if (!ctl.no_unmount) {
 		int ct = umount_partitions(&ctl); /* umount all, or count mounted on -M */
 
 		if (ct == 0 && mountpoint)
 			umount_one(&ctl, mountpoint); /* probably whole-device */
 
-		if (ctl.M_option) {
+		if (ctl.no_part_unmount) {
 			if (ct == 1 && mountpoint)
 				umount_one(&ctl, mountpoint);
 			else if (ct)
