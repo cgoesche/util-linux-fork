@@ -79,7 +79,6 @@ struct eject_control {
 		auto_mode;		/* auto eject mode, if not needed -1 */
 
 	bool	 			/* command flags and arguments */
-		c_option,
 		d_option,
 		F_option,
 		f_option,
@@ -100,7 +99,7 @@ struct eject_control {
 
 	unsigned int force_exclusive;	/* use O_EXCL */
 
-	long int c_arg;			/* changer slot number */
+	long int changer_slot;		/* changer slot number, if not set it is -1 */
 	long int x_arg;			/* cd speed */
 };
 
@@ -210,8 +209,7 @@ static void parse_args(struct eject_control *ctl, int argc, char **argv)
 			ctl->auto_mode = ul_parse_switch(optarg, "on", "off",  "1", "0",  NULL);
 			break;
 		case 'c':
-			ctl->c_option = 1;
-			ctl->c_arg = strtoul_or_err(optarg, _("invalid argument to --changerslot/-c option"));
+			ctl->changer_slot = strtoul_or_err(optarg, _("invalid argument to --changerslot option"));
 			break;
 		case 'x':
 			ctl->x_option = 1;
@@ -357,11 +355,11 @@ static void manual_eject(const struct eject_control *ctl)
 static void changer_select(const struct eject_control *ctl)
 {
 #ifdef CDROM_SELECT_DISC
-	if (ioctl(ctl->fd, CDROM_SELECT_DISC, ctl->c_arg) < 0)
+	if (ioctl(ctl->fd, CDROM_SELECT_DISC, ctl->changer_slot) < 0)
 		err(EXIT_FAILURE, _("CD-ROM select disc command failed"));
 
 #elif defined CDROMLOADFROMSLOT
-	if (ioctl(ctl->fd, CDROMLOADFROMSLOT, ctl->c_arg) != 0)
+	if (ioctl(ctl->fd, CDROMLOADFROMSLOT, ctl->changer_slot) != 0)
 		err(EXIT_FAILURE, _("CD-ROM load from slot command failed"));
 #else
 	warnx(_("IDE/ATAPI CD-ROM changer not supported by this kernel") );
@@ -857,7 +855,8 @@ int main(int argc, char **argv)
 	int worked = 0;    /* set to 1 when successfully ejected */
 	struct eject_control ctl = {
 		.auto_mode = -1,
-		.fd = -1
+		.fd = -1,
+		.changer_slot = -1,
 	};
 
 	setlocale(LC_ALL,"");
@@ -979,7 +978,7 @@ int main(int argc, char **argv)
 	}
 
 	/* handle -x option only */
-	if (!ctl.c_option)
+	if (ctl.changer_slot < 0)
 		set_device_speed(&ctl);
 
 
@@ -1008,8 +1007,8 @@ int main(int argc, char **argv)
 	}
 
 	/* handle -c option */
-	if (ctl.c_option) {
-		verbose(&ctl, _("%s: selecting CD-ROM disc #%ld"), ctl.device, ctl.c_arg);
+	if (ctl.changer_slot >= 0) {
+		verbose(&ctl, _("%s: selecting CD-ROM disc #%ld"), ctl.device, ctl.changer_slot);
 		open_device(&ctl);
 		changer_select(&ctl);
 		set_device_speed(&ctl);
